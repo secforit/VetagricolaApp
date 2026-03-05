@@ -101,8 +101,14 @@ export async function GET(req: NextRequest) {
     const client = clientMap.get(pet.client_id);
     if (!client?.phone) continue;
 
-    const phone = client.phone.trim();
+    // Normalize to E.164: 07xx → +407xx, strip spaces/dashes
+    let phone = client.phone.replace(/[\s\-().]/g, '');
     if (!phone) continue;
+    if (phone.startsWith('07') || phone.startsWith('02') || phone.startsWith('03')) {
+      phone = '+4' + phone;
+    } else if (phone.startsWith('4') && !phone.startsWith('+')) {
+      phone = '+' + phone;
+    }
 
     const petName = pet.nickname ?? 'animalul dumneavoastră';
     const reminderName = reminder.name ?? reminder.protocol_name ?? 'tratament';
