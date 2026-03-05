@@ -8,6 +8,7 @@ const PUBLIC_PATHS = [
   '/api/auth/verify-totp',
   '/api/auth/totp-setup',
   '/api/auth/logout',
+  '/api/cron/send-reminders',
 ];
 const ALWAYS_PUBLIC = ['/_next', '/favicon.ico', '/logo.png', '/Logo-SECFORIT.png'];
 
