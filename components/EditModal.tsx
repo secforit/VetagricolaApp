@@ -18,7 +18,9 @@ export default function EditModal({ columns, record, onClose, onSave }: EditModa
   useEffect(() => {
     const initial: Record<string, string> = {};
     for (const col of columns) {
-      initial[col.key] = record ? String(record[col.key] ?? '') : '';
+      let val = record ? String(record[col.key] ?? '') : '';
+      if (col.type === 'date' && val.length > 10) val = val.slice(0, 10);
+      initial[col.key] = val;
     }
     setForm(initial);
   }, [record, columns]);
