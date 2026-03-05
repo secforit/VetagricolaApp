@@ -12,6 +12,8 @@ const SEARCHABLE_COLUMNS: Record<string, string[]> = {
   sales: ['invoice_id', 'payment_type', 'status'],
 };
 
+const SUPABASE_MAX_ROWS = 1000;
+
 export function listRoute(table: string) {
   return async function GET(req: NextRequest) {
     const supabase = getDb();
@@ -21,20 +23,41 @@ export function listRoute(table: string) {
     const limit = parseInt(searchParams.get('limit') ?? '200');
     const offset = (page - 1) * limit;
 
-    let query = supabase.from(table).select('*', { count: 'exact' });
-
-    if (search) {
-      const cols = SEARCHABLE_COLUMNS[table] ?? [];
-      if (cols.length > 0) {
-        const orFilter = cols.map(c => `${c}.ilike.%${search}%`).join(',');
-        query = query.or(orFilter);
+    function buildQuery() {
+      let q = supabase.from(table).select('*', { count: 'exact' });
+      if (search) {
+        const cols = SEARCHABLE_COLUMNS[table] ?? [];
+        if (cols.length > 0) {
+          q = q.or(cols.map(c => `${c}.ilike.%${search}%`).join(','));
+        }
       }
+      return q;
     }
 
-    const { data, count, error } = await query.range(offset, offset + limit - 1);
+    // If requested range fits in one Supabase request, fetch directly
+    if (limit <= SUPABASE_MAX_ROWS) {
+      const { data, count, error } = await buildQuery().range(offset, offset + limit - 1);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ data: data ?? [], total: count ?? 0 });
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ data: data ?? [], total: count ?? 0 });
+    // Otherwise batch-fetch in chunks of 1000
+    let all: unknown[] = [];
+    let total = 0;
+    let from = offset;
+
+    while (all.length < limit) {
+      const batchSize = Math.min(SUPABASE_MAX_ROWS, limit - all.length);
+      const { data, count, error } = await buildQuery().range(from, from + batchSize - 1);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (count !== null) total = count;
+      if (!data || data.length === 0) break;
+      all = all.concat(data);
+      from += data.length;
+      if (data.length < batchSize) break;
+    }
+
+    return NextResponse.json({ data: all, total });
   };
 }
 
