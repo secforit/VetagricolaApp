@@ -110,14 +110,17 @@ export async function GET(req: NextRequest) {
       phone = '+' + phone;
     }
 
-    const petName = pet.nickname ?? 'animalul dumneavoastră';
+    const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
+    const firstName = capitalize(client.first_name);
+    const petName = capitalize(pet.nickname ?? 'animalul dumneavoastra');
     const reminderName = reminder.name ?? reminder.protocol_name ?? 'tratament';
     const dueFormatted = formatDate(reminder.due_date);
 
     const body =
-      `Bună ziua, ${client.first_name}! ` +
-      `${petName} are scadent "${reminderName}" pe data de ${dueFormatted}. ` +
-      `Vă așteptăm la Canis Vet pentru programare!`;
+      `Stimate/a ${firstName}, va informam ca ${petName} are programata procedura "${reminderName}" ` +
+      `scadenta pe data de ${dueFormatted}. ` +
+      `Va asteptam la Canis Vet pentru programare. ` +
+      `Tel: 0752 823 794`;
 
     const result = await sendSms(phone, body);
     results.push({ reminder_id: reminder.id, phone, ...result });
