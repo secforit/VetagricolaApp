@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
       `Stimate/a ${firstName}, va informam ca ${petName} are programata procedura "${reminderName}" ` +
       `scadenta pe data de ${dueFormatted}. ` +
       `Va asteptam la Canis Vet pentru programare. ` +
-      `Tel: 0752 823 794`;
+      `Tel: 0745 534 944`;
 
     const result = await sendSms(phone, body);
     results.push({ reminder_id: reminder.id, phone, ...result });
