@@ -44,16 +44,19 @@ export async function GET(req: NextRequest) {
 
   const db = getDb();
 
-  // Target date: today + DAYS_BEFORE
+  // Window: today → today + DAYS_BEFORE
+  const today = new Date().toISOString().slice(0, 10);
   const target = new Date();
   target.setDate(target.getDate() + DAYS_BEFORE);
-  const targetDate = target.toISOString().slice(0, 10); // YYYY-MM-DD
+  const targetDate = target.toISOString().slice(0, 10);
 
-  // 1. Get reminders due on target date
+  // 1. Get reminders due within window that haven't been sent yet
   const { data: reminders, error: remErr } = await db
     .from('reminders')
     .select('id, pet_id, name, protocol_name, due_date')
-    .eq('due_date', targetDate);
+    .gte('due_date', today)
+    .lte('due_date', targetDate)
+    .is('sms_sent_at', null);
 
   if (remErr) {
     return NextResponse.json({ error: remErr.message }, { status: 500 });
@@ -121,6 +124,9 @@ export async function GET(req: NextRequest) {
       `Tel: 0745 534 944`;
 
     const result = await sendSms(phone, body);
+    if (result.ok) {
+      await db.from('reminders').update({ sms_sent_at: new Date().toISOString() }).eq('id', reminder.id);
+    }
     results.push({ reminder_id: reminder.id, phone, ...result });
   }
 
