@@ -5,7 +5,8 @@ const SMSO_API_KEY = process.env.SMSO_API_KEY!;
 const SMSO_SENDER = process.env.SMSO_SENDER!;
 const CRON_SECRET = process.env.CRON_SECRET!;
 
-const DAYS_BEFORE = 14;
+const DAYS_BEFORE_14 = 14;
+const DAYS_BEFORE_2 = 2;
 
 async function sendSms(to: string, body: string): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch('https://app.smso.ro/api/v1/send', {
@@ -44,30 +45,57 @@ export async function GET(req: NextRequest) {
 
   const db = getDb();
 
-  // Window: today → today + DAYS_BEFORE
   const today = new Date().toISOString().slice(0, 10);
-  const target = new Date();
-  target.setDate(target.getDate() + DAYS_BEFORE);
-  const targetDate = target.toISOString().slice(0, 10);
 
-  // 1. Get reminders due within window that haven't been sent yet
-  const { data: reminders, error: remErr } = await db
+  // Window for 14-day reminders: today → today + 14
+  const target14 = new Date();
+  target14.setDate(target14.getDate() + DAYS_BEFORE_14);
+  const targetDate14 = target14.toISOString().slice(0, 10);
+
+  // Window for 2-day reminders: today → today + 2
+  const target2 = new Date();
+  target2.setDate(target2.getDate() + DAYS_BEFORE_2);
+  const targetDate2 = target2.toISOString().slice(0, 10);
+
+  // 1a. Reminders for 14-day SMS (not yet sent)
+  const { data: reminders14, error: remErr14 } = await db
     .from('reminders')
     .select('id, pet_id, name, protocol_name, due_date')
     .gte('due_date', today)
-    .lte('due_date', targetDate)
+    .lte('due_date', targetDate14)
     .is('sms_sent_at', null);
 
-  if (remErr) {
-    return NextResponse.json({ error: remErr.message }, { status: 500 });
+  if (remErr14) {
+    return NextResponse.json({ error: remErr14.message }, { status: 500 });
   }
 
-  if (!reminders || reminders.length === 0) {
+  // 1b. Reminders for 2-day SMS (not yet sent)
+  const { data: reminders2, error: remErr2 } = await db
+    .from('reminders')
+    .select('id, pet_id, name, protocol_name, due_date')
+    .gte('due_date', today)
+    .lte('due_date', targetDate2)
+    .is('sms_sent_2d_at', null);
+
+  if (remErr2) {
+    return NextResponse.json({ error: remErr2.message }, { status: 500 });
+  }
+
+  // Merge all reminders that need processing (deduplicate by id + type)
+  type ReminderRow = { id: number; pet_id: number; name: string | null; protocol_name: string | null; due_date: string };
+  type ReminderTask = { reminder: ReminderRow; type: '14d' | '2d' };
+
+  const tasks: ReminderTask[] = [
+    ...(reminders14 ?? []).map(r => ({ reminder: r as ReminderRow, type: '14d' as const })),
+    ...(reminders2 ?? []).map(r => ({ reminder: r as ReminderRow, type: '2d' as const })),
+  ];
+
+  if (tasks.length === 0) {
     return NextResponse.json({ sent: 0, message: 'No reminders due' });
   }
 
-  // 2. Get pets for those pet_ids
-  const petIds = [...new Set(reminders.map(r => r.pet_id))];
+  // 2. Get all unique pets
+  const petIds = [...new Set(tasks.map(t => t.reminder.pet_id))];
   const { data: pets, error: petsErr } = await db
     .from('pets')
     .select('id, client_id, nickname')
@@ -77,7 +105,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: petsErr.message }, { status: 500 });
   }
 
-  // 3. Get clients for those client_ids
+  // 3. Get all unique clients
   const clientIds = [...new Set((pets ?? []).map(p => p.client_id))];
   const { data: clients, error: clientsErr } = await db
     .from('clients')
@@ -92,10 +120,12 @@ export async function GET(req: NextRequest) {
   const petMap = new Map((pets ?? []).map(p => [p.id, p]));
   const clientMap = new Map((clients ?? []).map(c => [c.id, c]));
 
-  // 4. Send SMS for each reminder
-  const results: { reminder_id: number; phone: string; ok: boolean; error?: string }[] = [];
+  const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
 
-  for (const reminder of reminders) {
+  // 4. Send SMS for each task
+  const results: { reminder_id: number; type: string; phone: string; ok: boolean; error?: string }[] = [];
+
+  for (const { reminder, type } of tasks) {
     const pet = petMap.get(reminder.pet_id);
     if (!pet) continue;
 
@@ -111,7 +141,6 @@ export async function GET(req: NextRequest) {
       phone = '+' + phone;
     }
 
-    const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
     const firstName = capitalize(client.first_name);
     const petName = capitalize(pet.nickname ?? 'animalul dumneavoastra');
     const reminderName = reminder.name ?? reminder.protocol_name ?? 'tratament';
@@ -125,9 +154,10 @@ export async function GET(req: NextRequest) {
 
     const result = await sendSms(phone, body);
     if (result.ok) {
-      await db.from('reminders').update({ sms_sent_at: new Date().toISOString() }).eq('id', reminder.id);
+      const updateField = type === '14d' ? 'sms_sent_at' : 'sms_sent_2d_at';
+      await db.from('reminders').update({ [updateField]: new Date().toISOString() }).eq('id', reminder.id);
     }
-    results.push({ reminder_id: reminder.id, phone, ...result });
+    results.push({ reminder_id: reminder.id, type, phone, ...result });
   }
 
   const sent = results.filter(r => r.ok).length;
