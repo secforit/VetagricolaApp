@@ -1,27 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import getDb from '@/lib/db';
 
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID!;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN!;
-const TWILIO_MESSAGING_SERVICE_SID = process.env.TWILIO_MESSAGING_SERVICE_SID!;
+const SMSO_API_KEY = process.env.SMSO_API_KEY!;
+const SMSO_SENDER = process.env.SMSO_SENDER!;
 const CRON_SECRET = process.env.CRON_SECRET!;
 
 const DAYS_BEFORE = 14;
 
 async function sendSms(to: string, body: string): Promise<{ ok: boolean; error?: string }> {
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
-  const credentials = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
-
-  const res = await fetch(url, {
+  const res = await fetch('https://app.smso.ro/api/v1/send', {
     method: 'POST',
     headers: {
-      Authorization: `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Authorization': SMSO_API_KEY,
+      'Content-Type': 'application/json',
     },
-    body: new URLSearchParams({
-      To: to,
-      MessagingServiceSid: TWILIO_MESSAGING_SERVICE_SID,
-      Body: body,
+    body: JSON.stringify({
+      to,
+      sender: Number(SMSO_SENDER),
+      body,
+      type: 'transactional',
+      remove_special_chars: 1,
     }),
   });
 
