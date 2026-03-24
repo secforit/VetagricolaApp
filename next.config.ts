@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
               // in production you can tighten this further with nonces
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https://api.qrserver.com",
+              "img-src 'self' data: blob:",
               "font-src 'self'",
               `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}`,
               "frame-ancestors 'none'",

@@ -19,8 +19,8 @@ export function listRoute(table: string) {
     const supabase = getDb();
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') ?? '';
-    const page = parseInt(searchParams.get('page') ?? '1');
-    const limit = parseInt(searchParams.get('limit') ?? '200');
+    const page = Math.max(parseInt(searchParams.get('page') ?? '1') || 1, 1);
+    const limit = Math.min(parseInt(searchParams.get('limit') ?? '200') || 200, 500);
     const offset = (page - 1) * limit;
 
     function buildQuery() {

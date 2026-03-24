@@ -8,7 +8,9 @@ import { PawPrint, Loader2 } from 'lucide-react';
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const from = params.get('from') ?? '/';
+  const rawFrom = params.get('from') ?? '/';
+  const from = rawFrom.startsWith('/') && !rawFrom.startsWith('//') ? rawFrom : '/';
+
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

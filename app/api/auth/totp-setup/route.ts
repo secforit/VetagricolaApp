@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
+import QRCode from 'qrcode';
 import getDb from '@/lib/db';
 
 // Returns the TOTP secret + QR URL for the pending user (requires valid pending token)
@@ -34,11 +35,11 @@ export async function GET(req: NextRequest) {
   }
 
   const otpauthUrl = `otpauth://totp/CanisVet:${encodeURIComponent(username)}?secret=${row.secret}&issuer=CanisVet`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(otpauthUrl)}`;
+  const qrDataUrl = await QRCode.toDataURL(otpauthUrl, { width: 256, margin: 2 });
 
   return NextResponse.json({
     secret: row.secret,
     otpauth_url: otpauthUrl,
-    qr_url: qrUrl,
+    qr_url: qrDataUrl,
   });
 }

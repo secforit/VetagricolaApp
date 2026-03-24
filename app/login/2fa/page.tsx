@@ -8,7 +8,9 @@ import { ShieldCheck, Loader2, ArrowLeft } from 'lucide-react';
 function TwoFactorForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const from = params.get('from') ?? '/';
+  const rawFrom = params.get('from') ?? '/';
+  const from = rawFrom.startsWith('/') && !rawFrom.startsWith('//') ? rawFrom : '/';
+
 
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
