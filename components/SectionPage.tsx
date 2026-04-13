@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DataTable from './DataTable';
 import { Column } from '@/lib/types';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 
 interface SectionPageProps {
   title: string;
@@ -11,17 +13,33 @@ interface SectionPageProps {
 }
 
 export default function SectionPage({ title, apiPath, columns }: SectionPageProps) {
+  const searchParams = useSearchParams();
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newId, setNewId] = useState<number | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const initialSearch = (searchParams.get('search') ?? '').trim().slice(0, 100);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/${apiPath}?limit=5000`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Eroare ${res.status}`);
+      }
       const json = await res.json();
       setData(json.data ?? []);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Eroare la încărcarea datelor';
+      setError(msg);
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -29,62 +47,85 @@ export default function SectionPage({ title, apiPath, columns }: SectionPageProp
 
   useEffect(() => { load(); }, [load]);
 
-  function showNewId(id: number) {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setNewId(id);
-    toastTimer.current = setTimeout(() => setNewId(null), 5000);
-  }
-
   async function handleSave(record: Record<string, unknown>, isNew: boolean) {
-    const virtualKeys = new Set(columns.filter(c => c.virtual).map(c => c.key));
-    const payload = Object.fromEntries(Object.entries(record).filter(([k]) => !virtualKeys.has(k)));
-    if (isNew) {
-      const res = await fetch(`/api/${apiPath}`, {
-        method: 'POST',
+    try {
+      const url = isNew ? `/api/${apiPath}` : `/api/${apiPath}/${record.id}`;
+      const method = isNew ? 'POST' : 'PUT';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(record),
       });
-      const created = await res.json();
-      if (created?.id) showNewId(created.id);
-    } else {
-      await fetch(`/api/${apiPath}/${record.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Eroare ${res.status}`);
+      }
+      showToast(isNew ? 'Înregistrare creată cu succes' : 'Înregistrare actualizată cu succes', 'success');
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Eroare la salvare';
+      showToast(msg, 'error');
+      throw err;
     }
-    await load();
   }
 
   async function handleDelete(id: number) {
-    await fetch(`/api/${apiPath}/${id}`, { method: 'DELETE' });
-    await load();
+    try {
+      const res = await fetch(`/api/${apiPath}/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Eroare ${res.status}`);
+      }
+      showToast('Înregistrare ștearsă cu succes', 'success');
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Eroare la ștergere';
+      showToast(msg, 'error');
+    }
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {newId !== null && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-card border border-border rounded-[var(--radius)] shadow-lg px-4 py-3 text-sm animate-in fade-in slide-in-from-bottom-2">
-          <span className="text-muted-foreground">Înregistrare adăugată cu ID:</span>
-          <span className="font-bold text-primary text-base">{newId}</span>
-          <button onClick={() => setNewId(null)} className="ml-1 text-muted-foreground hover:text-foreground transition-colors text-lg leading-none">&times;</button>
-        </div>
-      )}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">{title}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Gestionați înregistrările din această secțiune
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-5 shadow-sm">
+        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Modul clinic în context multi-tenant, cu editare sigură pe clinica activă.
         </p>
       </div>
-      <Suspense>
-        <DataTable
-          columns={columns}
-          data={data}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          loading={loading}
-        />
-      </Suspense>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>
+            {error}
+            <button onClick={load} className="ml-2 underline font-medium">Reîncearcă</button>
+          </span>
+        </div>
+      )}
+
+      <DataTable
+        columns={columns}
+        data={data}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        loading={loading}
+        initialSearch={initialSearch}
+      />
+
+      {/* Toast notification */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium shadow-lg transition-all ${
+          toast.type === 'success'
+            ? 'bg-emerald-600 text-white'
+            : 'bg-rose-600 text-white'
+        }`}>
+          {toast.type === 'success'
+            ? <CheckCircle size={16} aria-hidden="true" />
+            : <AlertCircle size={16} aria-hidden="true" />
+          }
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }

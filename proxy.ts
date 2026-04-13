@@ -1,82 +1,107 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-// Paths that skip auth entirely
-const PUBLIC_PATHS = [
-  '/login',
+const PUBLIC_PREFIXES = [
+  '/api/billing/webhook',
   '/api/auth/login',
+  '/api/auth/register',
   '/api/auth/verify-totp',
   '/api/auth/totp-setup',
   '/api/auth/logout',
-  '/api/cron/send-reminders',
+  '/api/invites/',
+  '/api/cron/',
+  '/invite/',
+  '/legal/',
 ];
-const ALWAYS_PUBLIC = ['/_next', '/favicon.ico', '/logo.png', '/Logo-SECFORIT.png'];
-
-function getClientIp(req: NextRequest): string {
-  return (
-    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
-    req.headers.get('x-real-ip') ??
-    'unknown'
-  );
-}
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const secretValue = process.env.AUTH_SECRET;
 
-  // Always allow static assets
-  if (ALWAYS_PUBLIC.some(p => pathname.startsWith(p))) {
+  if (!secretValue) {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
+  // Allow Next.js internals and static files
+  if (
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p)) ||
+    pathname.startsWith('/_next') ||
+    pathname === '/favicon.ico'
+  ) {
     return NextResponse.next();
   }
 
-  // IP allowlisting — if ALLOWED_IPS is set, block everyone else
-  const allowedIpsEnv = process.env.ALLOWED_IPS;
-  if (allowedIpsEnv) {
-    const ip = getClientIp(req);
-    const allowed = allowedIpsEnv.split(',').map(s => s.trim()).filter(Boolean);
-    if (ip !== 'unknown' && !allowed.includes(ip)) {
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const secret = new TextEncoder().encode(secretValue);
+
+  const pendingToken = req.cookies.get('auth_pending')?.value;
+  if (pendingToken) {
+    try {
+      const { payload } = await jwtVerify(pendingToken, secret);
+      const pendingStep = payload.step === 'totp_setup' ? '/login/2fa/setup' : '/login/2fa';
+
+      if (pathname.startsWith('/login/2fa')) {
+        return NextResponse.next();
       }
-      return new NextResponse('403 Access Denied', {
-        status: 403,
-        headers: { 'Content-Type': 'text/plain' },
-      });
+
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'MFA required' }, { status: 401 });
+      }
+
+      const redirectUrl = new URL(pendingStep, req.url);
+      redirectUrl.searchParams.set('from', pathname);
+      return NextResponse.redirect(redirectUrl);
+    } catch {
+      // Invalid pending token — fall through to normal auth handling
     }
   }
 
-  // Public paths skip JWT check
-  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
-    return NextResponse.next();
+  if (pathname === '/login' || pathname === '/register') {
+    const token = req.cookies.get('auth_token')?.value;
+    if (!token) {
+      return NextResponse.next();
+    }
+
+    try {
+      await jwtVerify(token, secret);
+      return NextResponse.redirect(new URL('/', req.url));
+    } catch {
+      return NextResponse.next();
+    }
   }
 
-  // Validate AUTH_SECRET
-  const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 32) {
-    console.error('[auth] AUTH_SECRET is missing or too short — blocking all requests');
-    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+  if (pathname.startsWith('/login/2fa')) {
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('from', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // Verify JWT session cookie
+  // Check full auth token
   const token = req.cookies.get('auth_token')?.value;
   if (token) {
     try {
-      await jwtVerify(token, new TextEncoder().encode(secret));
+      await jwtVerify(token, secret);
+
+      if (pathname === '/login' || pathname === '/register') {
+        return NextResponse.redirect(new URL('/', req.url));
+      }
+
       return NextResponse.next();
     } catch {
-      // Token invalid or expired — fall through to deny
+      // Token invalid or expired
     }
   }
 
+  // API routes return 401
   if (pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // App pages redirect to login
   const loginUrl = new URL('/login', req.url);
   loginUrl.searchParams.set('from', pathname);
   return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|logo\\.png).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
-

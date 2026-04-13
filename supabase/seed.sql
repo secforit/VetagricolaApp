@@ -1,0 +1,3 @@
+-- Seed intentionally left minimal.
+-- Apply schema migrations with `supabase db reset`, then bootstrap legacy data with:
+--   npm run import-csv

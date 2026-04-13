@@ -1,19 +1,28 @@
-import { NextResponse } from 'next/server';
-import getDb from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+import { applyAuthContextCookies, getRequestAuthContext } from '@/lib/auth';
+import { BUSINESS_TABLES, getTableDelegate } from '@/lib/prismaTables';
 
-export async function GET() {
-  const supabase = getDb();
-  const tables = ['clients', 'pets', 'vets', 'appointments', 'records', 'prescriptions', 'reminders', 'sales'];
+export async function GET(req: NextRequest) {
+  const { context, response } = await getRequestAuthContext(req);
+  if (!context) {
+    return response!;
+  }
+
+  const { session } = context;
   const counts: Record<string, number> = {};
 
   await Promise.all(
-    tables.map(async (t) => {
-      const { count } = await supabase
-        .from(t)
-        .select('*', { count: 'exact', head: true });
-      counts[t] = count ?? 0;
+    BUSINESS_TABLES.map(async (table) => {
+      const delegate = getTableDelegate(table);
+      counts[table] = await delegate.count({
+        where: {
+          clinic_id: session.clinicId,
+        },
+      });
     })
   );
 
-  return NextResponse.json(counts);
+  const apiResponse = NextResponse.json(counts);
+  applyAuthContextCookies(apiResponse, context);
+  return apiResponse;
 }

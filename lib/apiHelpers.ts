@@ -1,126 +1,218 @@
 import { NextRequest, NextResponse } from 'next/server';
-import getDb from './db';
+import { applyAuthContextCookies, getRequestAuthContext } from './auth';
+import {
+  buildListWhere,
+  buildScopedIdWhere,
+  getTableDelegate,
+  parseRecordId,
+  prepareMutationData,
+  serializeForJson,
+  SupportedTable,
+} from './prismaTables';
 
-const SEARCHABLE_COLUMNS: Record<string, string[]> = {
-  clients: ['first_name', 'last_name', 'email', 'phone', 'address', 'city', 'obs'],
-  pets: ['nickname', 'species', 'breed', 'color', 'chip_number', 'obs'],
-  vets: ['first_name', 'last_name', 'email', 'phone', 'license_number'],
-  appointments: ['service', 'observations', 'reason', 'user_note'],
-  records: ['pet', 'vet', 'service', 'diagnosis', 'comments'],
-  prescriptions: ['product_name', 'label', 'recommendations', 'status'],
-  reminders: ['protocol_name', 'name'],
-  sales: ['invoice_id', 'payment_type', 'status'],
-};
+function badRequest(message: string) {
+  return NextResponse.json({ error: message }, { status: 400 });
+}
 
-const SUPABASE_MAX_ROWS = 1000;
+function invalidIdResponse() {
+  return badRequest('ID invalid.');
+}
 
-export function listRoute(table: string) {
+export function listRoute(table: SupportedTable) {
   return async function GET(req: NextRequest) {
-    const supabase = getDb();
+    const { context, response } = await getRequestAuthContext(req);
+    if (!context) {
+      return response!;
+    }
+
+    const { session } = context;
     const { searchParams } = new URL(req.url);
-    const search = searchParams.get('search') ?? '';
-    const page = parseInt(searchParams.get('page') ?? '1');
-    const limit = parseInt(searchParams.get('limit') ?? '200');
+    const search = (searchParams.get('search') ?? '').trim().slice(0, 100);
+    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
+    const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') ?? '200', 10) || 200), 5000);
     const offset = (page - 1) * limit;
 
-    function buildQuery() {
-      let q = supabase.from(table).select('*', { count: 'exact' });
-      if (search) {
-        const cols = SEARCHABLE_COLUMNS[table] ?? [];
-        if (cols.length > 0) {
-          q = q.or(cols.map(c => `${c}.ilike.%${search}%`).join(','));
-        }
-      }
-      return q;
+    try {
+      const delegate = getTableDelegate(table);
+      const where = buildListWhere(table, session.clinicId, search);
+      const [data, total] = await Promise.all([
+        delegate.findMany({
+          where,
+          skip: offset,
+          take: limit,
+          orderBy: { id: 'asc' },
+        }),
+        delegate.count({ where }),
+      ]);
+
+      const apiResponse = NextResponse.json({
+        data: serializeForJson(data),
+        total,
+      });
+      applyAuthContextCookies(apiResponse, context);
+      return apiResponse;
+    } catch (error) {
+      console.error(`[${table}] list error:`, error);
+      return NextResponse.json({ error: 'Eroare la încărcarea datelor' }, { status: 500 });
     }
-
-    // If requested range fits in one Supabase request, fetch directly
-    if (limit <= SUPABASE_MAX_ROWS) {
-      const { data, count, error } = await buildQuery().range(offset, offset + limit - 1);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ data: data ?? [], total: count ?? 0 });
-    }
-
-    // Otherwise batch-fetch in chunks of 1000
-    let all: unknown[] = [];
-    let total = 0;
-    let from = offset;
-
-    while (all.length < limit) {
-      const batchSize = Math.min(SUPABASE_MAX_ROWS, limit - all.length);
-      const { data, count, error } = await buildQuery().range(from, from + batchSize - 1);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      if (count !== null) total = count;
-      if (!data || data.length === 0) break;
-      all = all.concat(data);
-      from += data.length;
-      if (data.length < batchSize) break;
-    }
-
-    return NextResponse.json({ data: all, total });
   };
 }
 
-export function createRoute(table: string) {
+export function createRoute(table: SupportedTable) {
   return async function POST(req: NextRequest) {
-    const supabase = getDb();
-    const body = await req.json();
-    const { id: _id, ...insertBody } = body;
+    const { context, response } = await getRequestAuthContext(req);
+    if (!context) {
+      return response!;
+    }
 
-    const { data, error } = await supabase
-      .from(table)
-      .insert(insertBody)
-      .select()
-      .single();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return badRequest('Format JSON invalid');
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data, { status: 201 });
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return badRequest('Payload invalid.');
+    }
+
+    try {
+      const delegate = getTableDelegate(table);
+      const data = prepareMutationData(table, body as Record<string, unknown>, context.session.clinicId);
+      const created = await delegate.create({ data });
+
+      const apiResponse = NextResponse.json(serializeForJson(created), { status: 201 });
+      applyAuthContextCookies(apiResponse, context);
+      return apiResponse;
+    } catch (error) {
+      console.error(`[${table}] create error:`, error);
+      const isInvalidField =
+        error instanceof Error && error.message.startsWith('Câmp numeric invalid');
+      const message = isInvalidField ? error.message : 'Eroare la crearea înregistrării';
+      return NextResponse.json({ error: message }, { status: isInvalidField ? 400 : 500 });
+    }
   };
 }
 
-export function getOneRoute(table: string) {
-  return async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export function getOneRoute(table: SupportedTable) {
+  return async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { context, response } = await getRequestAuthContext(req);
+    if (!context) {
+      return response!;
+    }
+
     const { id } = await params;
-    const supabase = getDb();
+    const recordId = parseRecordId(id);
+    if (recordId === null) {
+      return invalidIdResponse();
+    }
 
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .eq('id', id)
-      .single();
+    try {
+      const delegate = getTableDelegate(table);
+      const data = await delegate.findFirst({
+        where: buildScopedIdWhere(table, context.session.clinicId, recordId),
+      });
 
-    if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(data);
+      if (!data) {
+        return NextResponse.json({ error: 'Înregistrare negăsită' }, { status: 404 });
+      }
+
+      const apiResponse = NextResponse.json(serializeForJson(data));
+      applyAuthContextCookies(apiResponse, context);
+      return apiResponse;
+    } catch (error) {
+      console.error(`[${table}] get error:`, error);
+      return NextResponse.json({ error: 'Eroare la încărcarea înregistrării' }, { status: 500 });
+    }
   };
 }
 
-export function updateRoute(table: string) {
+export function updateRoute(table: SupportedTable) {
   return async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { context, response } = await getRequestAuthContext(req);
+    if (!context) {
+      return response!;
+    }
+
     const { id } = await params;
-    const supabase = getDb();
-    const body = await req.json();
-    const { id: _id, ...updateBody } = body;
+    const recordId = parseRecordId(id);
+    if (recordId === null) {
+      return invalidIdResponse();
+    }
 
-    const { data, error } = await supabase
-      .from(table)
-      .update(updateBody)
-      .eq('id', id)
-      .select()
-      .single();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return badRequest('Format JSON invalid');
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return badRequest('Payload invalid.');
+    }
+
+    try {
+      const delegate = getTableDelegate(table);
+      const data = prepareMutationData(table, body as Record<string, unknown>, context.session.clinicId);
+      const result = await delegate.updateMany({
+        where: buildScopedIdWhere(table, context.session.clinicId, recordId),
+        data,
+      });
+
+      if (result.count === 0) {
+        return NextResponse.json({ error: 'Înregistrare negăsită' }, { status: 404 });
+      }
+
+      const updated = await delegate.findUnique({
+        where: { id: recordId },
+      });
+
+      if (!updated) {
+        return NextResponse.json({ error: 'Înregistrare negăsită' }, { status: 404 });
+      }
+
+      const apiResponse = NextResponse.json(serializeForJson(updated));
+      applyAuthContextCookies(apiResponse, context);
+      return apiResponse;
+    } catch (error) {
+      console.error(`[${table}] update error:`, error);
+      const isInvalidField =
+        error instanceof Error && error.message.startsWith('Câmp numeric invalid');
+      const message = isInvalidField ? error.message : 'Eroare la actualizarea înregistrării';
+      return NextResponse.json({ error: message }, { status: isInvalidField ? 400 : 500 });
+    }
   };
 }
 
-export function deleteRoute(table: string) {
-  return async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export function deleteRoute(table: SupportedTable) {
+  return async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { context, response } = await getRequestAuthContext(req);
+    if (!context) {
+      return response!;
+    }
+
     const { id } = await params;
-    const supabase = getDb();
+    const recordId = parseRecordId(id);
+    if (recordId === null) {
+      return invalidIdResponse();
+    }
 
-    const { error } = await supabase.from(table).delete().eq('id', id);
+    try {
+      const delegate = getTableDelegate(table);
+      const result = await delegate.deleteMany({
+        where: buildScopedIdWhere(table, context.session.clinicId, recordId),
+      });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true });
+      if (result.count === 0) {
+        return NextResponse.json({ error: 'Înregistrare negăsită' }, { status: 404 });
+      }
+
+      const apiResponse = NextResponse.json({ success: true });
+      applyAuthContextCookies(apiResponse, context);
+      return apiResponse;
+    } catch (error) {
+      console.error(`[${table}] delete error:`, error);
+      return NextResponse.json({ error: 'Eroare la ștergerea înregistrării' }, { status: 500 });
+    }
   };
 }

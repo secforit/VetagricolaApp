@@ -1,44 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-import getDb from '@/lib/db';
+import { readPendingToken } from '@/lib/auth';
+import { ensureAdminMfaFactor } from '@/lib/tenant';
 
-// Returns the TOTP secret + QR URL for the pending user (requires valid pending token)
 export async function GET(req: NextRequest) {
-  const pendingToken = req.cookies.get('auth_pending')?.value;
-  if (!pendingToken) {
+  const pending = await readPendingToken(req.cookies);
+
+  if (!pending?.sub || pending.step !== 'totp_setup' || typeof pending.email !== 'string') {
     return NextResponse.json({ error: 'Sesiune expirată' }, { status: 401 });
   }
 
-  const jwtSecret = new TextEncoder().encode(process.env.AUTH_SECRET);
-  let username: string;
-  try {
-    const { payload } = await jwtVerify(pendingToken, jwtSecret);
-    if (payload.step !== 'totp_setup' || typeof payload.username !== 'string') {
-      throw new Error('Invalid token');
-    }
-    username = payload.username;
-  } catch {
-    return NextResponse.json({ error: 'Sesiune expirată' }, { status: 401 });
+  const factor = await ensureAdminMfaFactor(pending.sub, pending.email);
+  if (factor.verified) {
+    return NextResponse.json({ error: 'MFA este deja configurat' }, { status: 400 });
   }
-
-  // Get the unverified secret from DB
-  const { data: row } = await getDb()
-    .from('totp_secrets')
-    .select('secret')
-    .eq('username', username)
-    .eq('verified', false)
-    .single();
-
-  if (!row) {
-    return NextResponse.json({ error: 'TOTP deja configurat' }, { status: 400 });
-  }
-
-  const otpauthUrl = `otpauth://totp/CanisVet:${encodeURIComponent(username)}?secret=${row.secret}&issuer=CanisVet`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(otpauthUrl)}`;
 
   return NextResponse.json({
-    secret: row.secret,
-    otpauth_url: otpauthUrl,
-    qr_url: qrUrl,
+    secret: factor.secret,
+    otpauth_url: factor.otpauthUrl,
   });
 }

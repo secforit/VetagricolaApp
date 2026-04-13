@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import Link from 'next/link';
+import { Suspense, useMemo, useState } from 'react';
+import { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
-import { PawPrint, Loader2 } from 'lucide-react';
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const from = params.get('from') ?? '/';
+  const rawFrom = params.get('from') ?? '/';
+  const from = rawFrom.startsWith('/') && !rawFrom.startsWith('//') ? rawFrom : '/';
+  const initialEmail = useMemo(() => params.get('email') ?? '', [params]);
 
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,110 +21,94 @@ function LoginForm() {
     e.preventDefault();
     setError('');
     setLoading(true);
+
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.totp_setup) {
-          router.push(`/login/2fa/setup?from=${encodeURIComponent(from)}`);
-        } else if (data.totp) {
-          router.push(`/login/2fa?from=${encodeURIComponent(from)}`);
-        } else {
-          router.push(from);
-          router.refresh();
-        }
-      } else {
-        const data = await res.json();
-        setError(data.error ?? 'Autentificare eșuată');
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? 'Autentificarea a eșuat.');
+        return;
       }
+
+      if (data.requires2FA) {
+        router.push(`${data.redirect}?from=${encodeURIComponent(from)}`);
+        return;
+      }
+
+      router.push(from);
+      router.refresh();
     } catch {
-      setError('Eroare de rețea, încercați din nou');
+      setError('Eroare de rețea. Încearcă din nou.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      {/* Subtle background pattern */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: 'radial-gradient(circle at 1px 1px, var(--color-foreground) 1px, transparent 0)',
-        backgroundSize: '32px 32px',
-      }} />
-
-      <div className="relative bg-card rounded-[var(--radius)] shadow-lg border border-border w-full max-w-sm p-8">
-        {/* Brand */}
+    <div className="min-h-screen bg-[linear-gradient(135deg,#f8fafc_0%,#eef6ff_45%,#fff7ed_100%)] flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white/90 backdrop-blur shadow-[0_30px_80px_rgba(15,23,42,0.12)] p-8">
         <div className="mb-8 text-center">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-[var(--radius)] bg-primary text-primary-foreground mb-4">
-            <PawPrint className="h-7 w-7" />
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-2xl text-white">
+            C
           </div>
-          <h1 className="text-xl font-bold text-foreground">Canis Vet</h1>
-          <p className="text-sm text-muted-foreground mt-1">Gestionare Clinica Veterinara</p>
+          <h1 className="text-2xl font-bold text-slate-900">CanisVET</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Autentificare pentru clinici veterinare
+          </p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Utilizator
-            </label>
+            <label className="text-sm font-medium text-slate-700">Email</label>
             <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               required
               autoFocus
-              autoComplete="username"
-              className="border border-input rounded-[var(--radius)] px-4 py-2.5 text-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow"
-              placeholder="Introduceți utilizatorul"
+              autoComplete="email"
+              className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Parolă
-            </label>
+            <label className="text-sm font-medium text-slate-700">Parolă</label>
             <input
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               required
               autoComplete="current-password"
-              className="border border-input rounded-[var(--radius)] px-4 py-2.5 text-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow"
-              placeholder="Introduceți parola"
+              className="rounded-xl border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10"
             />
           </div>
 
           {error && (
-            <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-[var(--radius)] px-4 py-2.5">
+            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
-            </div>
+            </p>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-[var(--radius)] py-2.5 text-sm transition-colors disabled:opacity-50 shadow-sm"
+            className="mt-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
           >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Se autentifică...
-              </>
-            ) : (
-              'Autentificare'
-            )}
+            {loading ? 'Se autentifică...' : 'Autentificare'}
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-border text-center">
-          <p className="text-xs text-muted-foreground">
-            Vetagricola Farm SRL &copy; {new Date().getFullYear()}
-          </p>
+        <div className="mt-6 text-center text-sm text-slate-500">
+          Nu ai cont pentru clinică?
+          {' '}
+          <Link href="/register" className="font-medium text-slate-900 hover:underline">
+            Înregistrează clinica
+          </Link>
         </div>
       </div>
     </div>
