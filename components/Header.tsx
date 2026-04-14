@@ -65,11 +65,7 @@ export default function Header() {
         {/* Brand */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Logo" width={40} height={40} className="object-contain" />
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-white">CanisVet</div>
-            <div className="text-[10px] text-sidebar-foreground/60 hidden sm:block">Cabinet Veterinar Arad</div>
-          </div>
+          <img src="/logo.svg" alt="Logo" width={40} height={40} className="object-contain" />
         </Link>
 
         {/* Desktop nav */}

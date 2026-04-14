@@ -1,65 +1,40 @@
 @import "tailwindcss";
 
-@theme inline {
-  --font-sans: 'Inter', 'Inter Fallback', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'JetBrains Mono Fallback', monospace;
-
-  --color-background: #f8f9fb;
-  --color-foreground: #0f172a;
-  --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
-  --color-ring: #84c6c6;
-
-  --color-primary: #84c6c6;
-  --color-primary-foreground: #0f172a;
-  --color-primary-light: #d4ecec;
-
-  --color-secondary: #f1f5f9;
-  --color-secondary-foreground: #0f172a;
-
-  --color-accent: #f59e0b;
-  --color-accent-foreground: #ffffff;
-
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #ffffff;
-
-  --color-success: #10b981;
-  --color-success-foreground: #ffffff;
-
-  --color-sidebar: #0f172a;
-  --color-sidebar-foreground: #cbd5e1;
-  --color-sidebar-accent: #84c6c6;
-  --color-sidebar-muted: #1e293b;
-  --color-sidebar-border: #1e293b;
-
-  --radius: 0.625rem;
-}
-
-* {
-  border-color: var(--color-border);
+:root {
+  --font-display: "Avenir Next", "Nunito Sans", "Segoe UI", sans-serif;
+  --font-body: "Avenir", "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  --bg-soft: #f3f7fb;
+  --bg-accent: #eaf4ff;
+  --surface: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #475569;
 }
 
 body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(circle at 10% -10%, rgba(22, 163, 74, 0.1), transparent 40%),
+    radial-gradient(circle at 95% -5%, rgba(14, 116, 144, 0.14), transparent 38%),
+    linear-gradient(180deg, var(--bg-accent) 0%, var(--bg-soft) 38%, #f8fafc 100%);
+  color: var(--text-main);
+  min-height: 100vh;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+::selection {
+  background: #c7e2ff;
+  color: #0f172a;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-muted-foreground);
+
+.app-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, #ffffff 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }

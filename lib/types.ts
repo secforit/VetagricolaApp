@@ -122,18 +122,72 @@ export interface Sale {
   updated_at: string;
 }
 
+export type ClinicRole = 'clinic_admin' | 'vet' | 'assistant';
+
+export type ClinicStatus = 'trial' | 'active' | 'past_due' | 'canceled';
+
+export interface AppSession {
+  userId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
+  clinicId: string;
+  clinicName: string;
+  role: ClinicRole;
+  isOwner: boolean;
+  clinicStatus: ClinicStatus;
+  trialEnd: string | null;
+  graceEnd: string | null;
+  clinicAccessible: boolean;
+}
+
+export interface ClinicMembershipSummary {
+  clinicId: string;
+  clinicName: string;
+  role: ClinicRole;
+  isOwner: boolean;
+  clinicStatus: ClinicStatus;
+  trialEnd: string | null;
+  graceEnd: string | null;
+  clinicAccessible: boolean;
+  isActive: boolean;
+}
+
+export interface ClinicTeamMember {
+  userId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
+  role: ClinicRole;
+  isOwner: boolean;
+  createdAt: string;
+}
+
+export interface ClinicTeamInvite {
+  id: string;
+  email: string;
+  role: ClinicRole;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  status: 'pending' | 'accepted' | 'expired';
+}
+
+export interface ClinicTeamSnapshot {
+  members: ClinicTeamMember[];
+  invites: ClinicTeamInvite[];
+  trialUserLimit: number;
+  activeUserCount: number;
+  pendingInviteCount: number;
+  isTrial: boolean;
+}
+
 export interface Column {
   key: string;
   label: string;
   type: 'text' | 'date' | 'select' | 'number' | 'textarea';
   options?: string[];
   readOnly?: boolean;
-  /** If true, this column is shown in the table view. Defaults to true when not set. */
-  tableVisible?: boolean;
-  /** Optional display formatter — applied in table/card views only, not in edit forms. */
-  format?: (value: unknown) => string;
-  /** If set, renders a small link icon next to the cell value that navigates to the returned URL. */
-  linkTo?: (value: unknown, row: { [key: string]: unknown }) => string;
-  /** If true, this column is computed/virtual and its value is stripped before POST/PUT requests. */
-  virtual?: boolean;
 }

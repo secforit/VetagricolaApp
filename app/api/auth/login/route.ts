@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SignJWT } from 'jose';
-import bcrypt from 'bcryptjs';
-import speakeasy from 'speakeasy';
-import getDb from '@/lib/db';
+import { clearAuthCookies, persistAuthSession, persistPendingSession, persistSupabaseSession } from '@/lib/auth';
+import { createUserDbClient } from '@/lib/db';
+import prisma from '@/lib/prisma';
+import { ensureAdminMfaFactor, getPrimaryClinicContext } from '@/lib/tenant';
 
-const TOKEN_COOKIE = 'auth_token';
-const PENDING_COOKIE = 'auth_pending';
-const TOKEN_MAX_AGE = 60 * 60 * 8;   // 8 hours
-const PENDING_MAX_AGE = 60 * 5;      // 5 minutes (TOTP window)
+// Rate limit login attempts: max 10 per IP per 15 minutes
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 10;
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
-// In-memory rate limiter: max 5 failed attempts per IP per 15 minutes
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
-const attempts = new Map<string, { count: number; resetAt: number }>();
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
 
 function getClientIp(req: NextRequest): string {
   return (
@@ -22,30 +21,38 @@ function getClientIp(req: NextRequest): string {
   );
 }
 
-function isRateLimited(ip: string): boolean {
+function isLoginRateLimited(ip: string): boolean {
   const now = Date.now();
-  const entry = attempts.get(ip);
-  if (!entry || now > entry.resetAt) return false;
-  return entry.count >= MAX_ATTEMPTS;
-}
-
-function recordFailure(ip: string) {
-  const now = Date.now();
-  const entry = attempts.get(ip);
+  const entry = loginAttempts.get(ip);
   if (!entry || now > entry.resetAt) {
-    attempts.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
-  } else {
-    entry.count += 1;
+    return false;
   }
+
+  return entry.count >= LOGIN_MAX_ATTEMPTS;
 }
 
-function clearAttempts(ip: string) {
-  attempts.delete(ip);
+function recordLoginFailure(ip: string) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return;
+  }
+
+  entry.count += 1;
 }
 
-async function logEvent(ip: string, username: string, event: string, userAgent: string) {
+async function logEvent(ip: string, email: string, event: string, userAgent: string) {
   try {
-    await getDb().from('auth_log').insert({ ip, username, event, user_agent: userAgent });
+    await prisma.authLog.create({
+      data: {
+        ip,
+        username: email,
+        event,
+        user_agent: userAgent,
+      },
+    });
   } catch {
     console.warn('[auth] audit log write failed');
   }
@@ -55,93 +62,89 @@ export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
   const userAgent = req.headers.get('user-agent') ?? '';
 
-  if (isRateLimited(ip)) {
-    await logEvent(ip, '', 'rate_limited', userAgent);
+  if (isLoginRateLimited(ip)) {
+    await logEvent(ip, '', 'login_rate_limited', userAgent);
     return NextResponse.json(
-      { error: 'Prea multe încercări. Încearcă din nou peste 15 minute.' },
+      { error: 'Prea multe încercări. Încearcă din nou mai târziu.' },
       { status: 429 }
     );
   }
 
-  const body = await req.json().catch(() => ({}));
-  const { username, password } = body;
+  const body = await req.json().catch(() => null);
+  const email = normalizeEmail(typeof body?.email === 'string' ? body.email : '');
+  const password = typeof body?.password === 'string' ? body.password : '';
 
-  if (typeof username !== 'string' || typeof password !== 'string') {
-    return NextResponse.json({ error: 'Date invalide' }, { status: 400 });
+  if (!email || !password) {
+    return NextResponse.json({ error: 'Emailul și parola sunt obligatorii.' }, { status: 400 });
   }
 
-  // Look up user in Supabase
-  const db = getDb();
-  const { data: userRow } = await db
-    .from('users')
-    .select('password_hash')
-    .eq('username', username)
-    .single();
+  const supabase = createUserDbClient();
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (!userRow || !(await bcrypt.compare(password, userRow.password_hash))) {
-    recordFailure(ip);
-    await logEvent(ip, username, 'login_failed', userAgent);
-    return NextResponse.json({ error: 'Credențiale invalide' }, { status: 401 });
+  if (error || !data.session || !data.user) {
+    recordLoginFailure(ip);
+    await logEvent(ip, email, 'login_failed', userAgent);
+    return NextResponse.json({ error: 'Credențiale invalide.' }, { status: 401 });
   }
 
-  clearAttempts(ip);
+  const clinicContext = await getPrimaryClinicContext(data.user.id, data.user.email ?? email);
+  if (!clinicContext) {
+    recordLoginFailure(ip);
+    await logEvent(ip, email, 'login_without_membership', userAgent);
+    return NextResponse.json(
+      { error: 'Contul nu este asociat cu nicio clinică.' },
+      { status: 403 }
+    );
+  }
 
-  const jwtSecret = new TextEncoder().encode(process.env.AUTH_SECRET);
-
-  // Check TOTP status in database
-  const { data: totpRow } = await db
-    .from('totp_secrets')
-    .select('secret, verified')
-    .eq('username', username)
-    .single();
-
-  if (totpRow && totpRow.verified) {
-    // TOTP is set up and verified — require 2FA code
-    const pendingToken = await new SignJWT({ username, step: 'totp' })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime(`${PENDING_MAX_AGE}s`)
-      .sign(jwtSecret);
-
-    const res = NextResponse.json({ totp: true });
-    res.cookies.set(PENDING_COOKIE, pendingToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: PENDING_MAX_AGE,
-      path: '/',
+  if (clinicContext.role === 'clinic_admin') {
+    const factor = await ensureAdminMfaFactor(data.user.id, data.user.email ?? email);
+    const redirect = factor.verified ? '/login/2fa' : '/login/2fa/setup';
+    const response = NextResponse.json({
+      ok: true,
+      requires2FA: true,
+      redirect,
     });
-    return res;
-  }
+    clearAuthCookies(response);
+    persistSupabaseSession(response, data.session);
 
-  // TOTP not set up yet — generate secret and redirect to setup
-  let secret: string;
-  if (totpRow && !totpRow.verified) {
-    // Reuse existing unverified secret
-    secret = totpRow.secret;
-  } else {
-    // Generate new secret
-    const generated = speakeasy.generateSecret({
-      name: `CanisVet:${username}`,
-      length: 20,
+    await persistPendingSession(response, {
+      userId: data.user.id,
+      email: data.user.email ?? email,
+      clinicId: clinicContext.clinicId,
+      step: factor.verified ? 'totp' : 'totp_setup',
     });
-    secret = generated.base32;
-    await db.from('totp_secrets').upsert({ username, secret, verified: false });
+
+    await logEvent(
+      ip,
+      email,
+      factor.verified
+        ? clinicContext.clinicAccessible
+          ? 'login_pending_2fa'
+          : 'login_pending_2fa_inaccessible_clinic'
+        : clinicContext.clinicAccessible
+          ? 'login_pending_2fa_setup'
+          : 'login_pending_2fa_setup_inaccessible_clinic',
+      userAgent
+    );
+
+    return response;
   }
 
-  const pendingToken = await new SignJWT({ username, step: 'totp_setup' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(`${PENDING_MAX_AGE}s`)
-    .sign(jwtSecret);
-
-  const res = NextResponse.json({ totp_setup: true });
-  res.cookies.set(PENDING_COOKIE, pendingToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: PENDING_MAX_AGE,
-    path: '/',
+  const response = NextResponse.json({ ok: true });
+  clearAuthCookies(response);
+  persistSupabaseSession(response, data.session);
+  await persistAuthSession(response, {
+    userId: data.user.id,
+    email: data.user.email ?? email,
+    clinicId: clinicContext.clinicId,
   });
-  return res;
+
+  await logEvent(
+    ip,
+    email,
+    clinicContext.clinicAccessible ? 'login_success' : 'login_success_inaccessible_clinic',
+    userAgent
+  );
+  return response;
 }

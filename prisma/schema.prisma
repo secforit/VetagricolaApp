@@ -1,0 +1,430 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ClinicRole {
+  clinic_admin
+  vet
+  assistant
+
+  @@map("clinic_role")
+}
+
+enum ClinicStatus {
+  trial
+  active
+  past_due
+  canceled
+
+  @@map("clinic_status")
+}
+
+enum EmailTokenType {
+  verification
+  password_reset
+
+  @@map("email_token_type")
+}
+
+model Client {
+  id                 BigInt  @id @default(autoincrement()) @db.BigInt
+  clinic_id          String  @db.Uuid
+  first_name         String? @db.Text
+  last_name          String? @db.Text
+  birthdate          String? @db.Text
+  address            String? @db.Text
+  city               String? @db.Text
+  phone              String? @db.Text
+  secondary_phone    String? @db.Text
+  email              String? @db.Text
+  personal_id_number String? @db.Text
+  id_card_number     String? @db.Text
+  obs                String? @db.Text
+
+  @@index([clinic_id], map: "clients_clinic_id_idx")
+  @@map("clients")
+}
+
+model Pet {
+  id                 BigInt  @id @default(autoincrement()) @db.BigInt
+  clinic_id          String  @db.Uuid
+  client_id          BigInt? @db.BigInt
+  nickname           String? @db.Text
+  species            String? @db.Text
+  breed              String? @db.Text
+  crossbreed         String? @db.Text
+  mix_with           String? @db.Text
+  color              String? @db.Text
+  distinctive_marks  String? @db.Text
+  birthday           String? @db.Text
+  gender             String? @db.Text
+  chip_number        String? @db.Text
+  rabic_tag_number   String? @db.Text
+  microchip_location String? @db.Text
+  insurance_number   String? @db.Text
+  passport           String? @db.Text
+  pet_description    String? @db.Text
+  weight             String? @db.Text
+  allergies          String? @db.Text
+  blood_type         String? @db.Text
+  hormonal_status    String? @db.Text
+  obs                String? @db.Text
+
+  @@index([clinic_id], map: "pets_clinic_id_idx")
+  @@map("pets")
+}
+
+model Vet {
+  id             BigInt  @id @default(autoincrement()) @db.BigInt
+  clinic_id      String  @db.Uuid
+  email          String? @db.Text
+  first_name     String? @db.Text
+  last_name      String? @db.Text
+  title          String? @db.Text
+  phone          String? @db.Text
+  status         String? @db.Text
+  license_number String? @db.Text
+  created_at     String? @db.Text
+  updated_at     String? @db.Text
+
+  @@index([clinic_id], map: "vets_clinic_id_idx")
+  @@map("vets")
+}
+
+model Appointment {
+  id                   BigInt  @id @default(autoincrement()) @db.BigInt
+  clinic_id            String  @db.Uuid
+  patient_id           BigInt? @db.BigInt
+  vet_id               BigInt? @db.BigInt
+  service              String? @db.Text
+  observations         String? @db.Text
+  date                 String? @db.Text
+  duration             String? @db.Text
+  reason               String? @db.Text
+  notification_message String? @db.Text
+  user_note            String? @db.Text
+
+  @@index([clinic_id], map: "appointments_clinic_id_idx")
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id                    BigInt  @id @default(autoincrement()) @db.BigInt
+  clinic_id             String  @db.Uuid
+  date                  String? @db.Text
+  pet_id                BigInt? @db.BigInt
+  pet                   String? @db.Text
+  vet                   String? @db.Text
+  service               String? @db.Text
+  diagnosis             String? @db.Text
+  diagnosis_description String? @db.Text
+  presumptive_diagnosis String? @db.Text
+  treatment_description String? @db.Text
+  recommendations       String? @db.Text
+  comments              String? @db.Text
+
+  @@index([clinic_id], map: "records_clinic_id_idx")
+  @@map("records")
+}
+
+model Prescription {
+  id              BigInt  @id @default(autoincrement()) @db.BigInt
+  clinic_id       String  @db.Uuid
+  record_id       BigInt? @db.BigInt
+  vet_id          BigInt? @db.BigInt
+  pet_id          BigInt? @db.BigInt
+  product_name    String? @db.Text
+  quantity        String? @db.Text
+  unit            String? @db.Text
+  label           String? @db.Text
+  recommendations String? @db.Text
+  prescribed_at   String? @db.Text
+  expires_at      String? @db.Text
+  status          String? @db.Text
+  internal_notes  String? @db.Text
+  created_at      String? @db.Text
+  updated_at      String? @db.Text
+
+  @@index([clinic_id], map: "prescriptions_clinic_id_idx")
+  @@map("prescriptions")
+}
+
+model Reminder {
+  id                  BigInt    @id @default(autoincrement()) @db.BigInt
+  clinic_id           String    @db.Uuid
+  pet_id              BigInt?   @db.BigInt
+  protocol_name       String?   @db.Text
+  name                String?   @db.Text
+  administration_date String?   @db.Text
+  due_date            String?   @db.Text
+  sms_sent_at         DateTime? @db.Timestamptz(6)
+  sms_sent_2d_at      DateTime? @db.Timestamptz(6)
+
+  @@index([clinic_id], map: "reminders_clinic_id_idx")
+  @@map("reminders")
+}
+
+model Sale {
+  id           BigInt  @id @default(autoincrement()) @db.BigInt
+  clinic_id    String  @db.Uuid
+  vet_id       BigInt? @db.BigInt
+  customer_id  BigInt? @db.BigInt
+  invoice_id   String? @db.Text
+  subtotal     String? @db.Text
+  total        String? @db.Text
+  tax_amount   String? @db.Text
+  amount_paid  String? @db.Text
+  payment_type String? @db.Text
+  status       String? @db.Text
+  payment_date String? @db.Text
+  created_at   String? @db.Text
+  updated_at   String? @db.Text
+
+  @@index([clinic_id], map: "sales_clinic_id_idx")
+  @@map("sales")
+}
+
+model Clinic {
+  id                    String       @id @default(uuid()) @db.Uuid
+  name                  String       @db.Text
+  legal_name            String       @db.Text
+  cui_cif               String       @unique(map: "clinics_cui_cif_key") @db.Text
+  trade_register_number String       @db.Text
+  is_vat_payer          Boolean      @default(false)
+  billing_address       String       @db.Text
+  county                String       @db.Text
+  city                  String       @db.Text
+  country_code          String       @default("RO") @db.Text
+  contact_email         String       @db.Text
+  contact_phone         String       @db.Text
+  status                ClinicStatus @default(trial)
+  currency              String       @default("EUR") @db.Text
+  trial_started_at      DateTime     @default(now()) @db.Timestamptz(6)
+  trial_end             DateTime     @default(now()) @db.Timestamptz(6)
+  grace_end             DateTime     @default(now()) @db.Timestamptz(6)
+  owner_user_id         String?      @db.Uuid
+  terms_accepted_at     DateTime     @default(now()) @db.Timestamptz(6)
+  privacy_accepted_at   DateTime     @default(now()) @db.Timestamptz(6)
+  dpa_accepted_at       DateTime     @default(now()) @db.Timestamptz(6)
+  created_at            DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime     @updatedAt @db.Timestamptz(6)
+
+  @@index([owner_user_id], map: "clinics_owner_user_id_idx")
+  @@index([status], map: "clinics_status_idx")
+  @@map("clinics")
+}
+
+model Profile {
+  user_id          String    @id @db.Uuid
+  email            String    @unique @db.Text
+  first_name       String?   @db.Text
+  last_name        String?   @db.Text
+  full_name        String?   @db.Text
+  active_clinic_id String?   @db.Uuid
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([active_clinic_id], map: "profiles_active_clinic_id_idx")
+  @@map("profiles")
+}
+
+model UserClinic {
+  id         String     @id @default(uuid()) @db.Uuid
+  user_id    String     @db.Uuid
+  clinic_id  String     @db.Uuid
+  role       ClinicRole @default(assistant)
+  is_owner   Boolean    @default(false)
+  invited_by String?    @db.Uuid
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+
+  @@unique([user_id, clinic_id])
+  @@index([user_id], map: "user_clinics_user_id_idx")
+  @@index([clinic_id], map: "user_clinics_clinic_id_idx")
+  @@map("user_clinics")
+}
+
+model ClinicInvite {
+  id         String      @id @default(uuid()) @db.Uuid
+  clinic_id  String      @db.Uuid
+  email      String      @db.Text
+  role       ClinicRole  @default(assistant)
+  invited_by String?     @db.Uuid
+  token      String      @unique @db.Text
+  expires_at DateTime    @default(now()) @db.Timestamptz(6)
+  accepted_at DateTime?  @db.Timestamptz(6)
+  created_at DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([clinic_id], map: "clinic_invites_clinic_id_idx")
+  @@index([email], map: "clinic_invites_email_idx")
+  @@map("clinic_invites")
+}
+
+model ClinicSetting {
+  clinic_id         String   @id @db.Uuid
+  timezone          String   @default("Europe/Bucharest") @db.Text
+  locale            String   @default("ro-RO") @db.Text
+  trial_user_limit  Int      @default(2)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("clinic_settings")
+}
+
+model BillingEvent {
+  id           String    @id @default(uuid()) @db.Uuid
+  clinic_id    String    @db.Uuid
+  provider     String    @default("euplatesc") @db.Text
+  external_id  String?   @db.Text
+  status       String    @db.Text
+  amount_cents Int?
+  currency     String    @default("EUR") @db.Text
+  payload      Json?
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([clinic_id], map: "billing_events_clinic_id_idx")
+  @@map("billing_events")
+}
+
+model AuditLog {
+  id            BigInt   @id @default(autoincrement()) @db.BigInt
+  clinic_id     String   @db.Uuid
+  actor_user_id String?  @db.Uuid
+  table_name    String   @db.Text
+  action        String   @db.Text
+  record_id     String?  @db.Text
+  payload       Json?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([clinic_id], map: "audit_logs_clinic_id_idx")
+  @@map("audit_logs")
+}
+
+model AuthMfaFactor {
+  user_id    String   @id @db.Uuid
+  email      String   @db.Text
+  secret     String   @db.Text
+  verified   Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([email], map: "auth_mfa_factors_email_idx")
+  @@map("auth_mfa_factors")
+}
+
+model AuthLog {
+  id         BigInt   @id @default(autoincrement()) @db.BigInt
+  ip         String?  @db.Text
+  username   String?  @db.Text
+  event      String   @db.Text
+  user_agent String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("auth_log")
+}
+
+model EmailToken {
+  id         String         @id @default(uuid()) @db.Uuid
+  user_id    String?        @db.Uuid
+  email      String         @db.Text
+  token      String         @unique @db.Text
+  type       EmailTokenType
+  used       Boolean        @default(false)
+  expires_at DateTime       @db.Timestamptz(6)
+  created_at DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id], map: "email_tokens_user_id_idx")
+  @@index([type], map: "email_tokens_type_idx")
+  @@map("email_tokens")
+}
+
+model ImportJob {
+  id                  String    @id @default(uuid()) @db.Uuid
+  clinic_id           String    @db.Uuid
+  source_type         String    @db.Text
+  source_name         String    @db.Text
+  target_table        String    @db.Text
+  status              String    @default("draft") @db.Text
+  idempotency_key     String?   @db.Text
+  mapping_template_id String?   @db.Uuid
+  summary_json        Json?
+  created_by          String?   @db.Uuid
+  started_at          DateTime? @db.Timestamptz(6)
+  finished_at         DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([clinic_id], map: "import_jobs_clinic_id_idx")
+  @@index([status], map: "import_jobs_status_idx")
+  @@unique([clinic_id, idempotency_key], map: "import_jobs_clinic_idempotency_key_idx")
+  @@map("import_jobs")
+}
+
+model ImportJobRow {
+  id                 String   @id @default(uuid()) @db.Uuid
+  clinic_id          String   @db.Uuid
+  job_id             String   @db.Uuid
+  source_row_index   Int
+  raw_payload        Json?
+  normalized_payload Json?
+  status             String   @default("pending") @db.Text
+  target_table       String?  @db.Text
+  error_message      String?  @db.Text
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([job_id], map: "import_job_rows_job_id_idx")
+  @@index([job_id, status], map: "import_job_rows_job_status_idx")
+  @@index([clinic_id], map: "import_job_rows_clinic_id_idx")
+  @@map("import_job_rows")
+}
+
+model ImportMappingTemplate {
+  id                 String    @id @default(uuid()) @db.Uuid
+  clinic_id          String    @db.Uuid
+  source_fingerprint String    @db.Text
+  name               String    @db.Text
+  version            Int       @default(1)
+  is_active          Boolean   @default(true)
+  target_table       String    @db.Text
+  mapping_json       Json?
+  created_by         String?   @db.Uuid
+  approved_at        DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([clinic_id], map: "import_mapping_templates_clinic_id_idx")
+  @@index([clinic_id, source_fingerprint], map: "import_mapping_templates_fingerprint_idx")
+  @@map("import_mapping_templates")
+}
+
+model ImportMappingSuggestion {
+  id           String   @id @default(uuid()) @db.Uuid
+  clinic_id    String   @db.Uuid
+  job_id       String   @db.Uuid
+  source_field String   @db.Text
+  target_table String   @db.Text
+  target_field String   @db.Text
+  confidence   Decimal  @db.Decimal(5, 4)
+  reason       String   @default("") @db.Text
+  accepted     Boolean?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([job_id], map: "import_mapping_suggestions_job_id_idx")
+  @@map("import_mapping_suggestions")
+}
+
+model ImportConflict {
+  id                String   @id @default(uuid()) @db.Uuid
+  clinic_id         String   @db.Uuid
+  job_id            String   @db.Uuid
+  row_id            String?  @db.Uuid
+  conflict_type     String   @db.Text
+  details_json      Json?
+  resolution_status String   @default("open") @db.Text
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([job_id], map: "import_conflicts_job_id_idx")
+  @@map("import_conflicts")
+}

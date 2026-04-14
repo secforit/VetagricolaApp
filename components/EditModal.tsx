@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Column } from '@/lib/types';
-import { X } from 'lucide-react';
+import { X, Loader2, AlertCircle } from 'lucide-react';
 
 interface EditModalProps {
   columns: Column[];
@@ -14,13 +14,12 @@ interface EditModalProps {
 export default function EditModal({ columns, record, onClose, onSave }: EditModalProps) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const initial: Record<string, string> = {};
     for (const col of columns) {
-      let val = record ? String(record[col.key] ?? '') : '';
-      if (col.type === 'date' && val.length > 10) val = val.slice(0, 10);
-      initial[col.key] = val;
+      initial[col.key] = record ? String(record[col.key] ?? '') : '';
     }
     setForm(initial);
   }, [record, columns]);
@@ -29,48 +28,90 @@ export default function EditModal({ columns, record, onClose, onSave }: EditModa
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
+  function validate(): string | null {
+    for (const col of columns) {
+      if (col.readOnly) continue;
+      const val = form[col.key]?.trim() ?? '';
+      if (col.type === 'number' && val && isNaN(Number(val))) {
+        return `"${col.label}" trebuie să fie un număr valid`;
+      }
+    }
+    return null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
+
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setSaving(true);
     try {
-      await onSave(form);
+      const processed: Record<string, unknown> = { ...form };
+      for (const col of columns) {
+        const val = form[col.key];
+        if (col.type === 'number' && val) {
+          processed[col.key] = Number(val);
+        }
+        if (val === '') {
+          processed[col.key] = null;
+        }
+      }
+      if (record?.id) {
+        processed.id = record.id;
+      }
+      await onSave(processed);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Eroare la salvare';
+      setError(msg);
     } finally {
       setSaving(false);
     }
   }
 
+  const inputBase = 'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow w-full';
+
   return (
-    <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-card rounded-[var(--radius)] shadow-xl border border-border w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="text-lg font-semibold text-foreground">
-            {record ? 'Editare înregistrare' : 'Înregistrare nouă'}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">
+            {record ? 'Editare înregistrare' : 'Adăugare înregistrare nouă'}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-[var(--radius)] hover:bg-muted transition-colors"
-            aria-label="Close"
+            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+            aria-label="Închide"
           >
-            <X className="h-5 w-5 text-muted-foreground" />
+            <X size={18} />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto px-6 py-5 flex flex-col gap-5 flex-1">
+        <form onSubmit={handleSubmit} className="overflow-y-auto px-6 py-5 flex flex-col gap-4 flex-1">
+          {error && (
+            <div className="flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {columns.map(col => {
-              const inputClasses = "border border-input rounded-[var(--radius)] px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40 transition-shadow";
-
               if (col.readOnly) {
                 return (
                   <div key={col.key} className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{col.label}</label>
+                    <label className="text-sm font-medium text-gray-600">{col.label}</label>
                     <input
                       type="text"
                       value={form[col.key] ?? ''}
                       readOnly
-                      className="border border-input rounded-[var(--radius)] px-3 py-2 text-sm bg-muted text-muted-foreground cursor-not-allowed"
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400 w-full"
                     />
                   </div>
                 );
@@ -78,12 +119,12 @@ export default function EditModal({ columns, record, onClose, onSave }: EditModa
               if (col.type === 'textarea') {
                 return (
                   <div key={col.key} className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{col.label}</label>
+                    <label className="text-sm font-medium text-gray-700">{col.label}</label>
                     <textarea
                       value={form[col.key] ?? ''}
                       onChange={e => set(col.key, e.target.value)}
                       rows={3}
-                      className={`${inputClasses} resize-y`}
+                      className={`${inputBase} resize-y`}
                     />
                   </div>
                 );
@@ -91,13 +132,13 @@ export default function EditModal({ columns, record, onClose, onSave }: EditModa
               if (col.type === 'select' && col.options) {
                 return (
                   <div key={col.key} className="flex flex-col gap-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{col.label}</label>
+                    <label className="text-sm font-medium text-gray-700">{col.label}</label>
                     <select
                       value={form[col.key] ?? ''}
                       onChange={e => set(col.key, e.target.value)}
-                      className={inputClasses}
+                      className={`${inputBase} cursor-pointer`}
                     >
-                      <option value="">-- selectează --</option>
+                      <option value="">— selectează —</option>
                       {col.options.map(o => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -107,33 +148,38 @@ export default function EditModal({ columns, record, onClose, onSave }: EditModa
               }
               return (
                 <div key={col.key} className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{col.label}</label>
+                  <label className="text-sm font-medium text-gray-700">{col.label}</label>
                   <input
                     type={col.type === 'date' ? 'date' : col.type === 'number' ? 'number' : 'text'}
                     value={form[col.key] ?? ''}
                     onChange={e => set(col.key, e.target.value)}
-                    className={inputClasses}
+                    className={inputBase}
                   />
                 </div>
               );
             })}
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-border mt-2">
+          {/* Footer */}
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 mt-1">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium border border-border rounded-[var(--radius)] bg-card text-foreground hover:bg-muted transition-colors"
+              className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
             >
               Anulează
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-[var(--radius)] hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-default"
             >
-              {saving ? 'Se salvează...' : 'Salvează'}
+              {saving ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                  Se salvează...
+                </>
+              ) : 'Salvează'}
             </button>
           </div>
         </form>

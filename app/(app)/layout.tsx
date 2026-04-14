@@ -1,16 +1,10 @@
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { cookies } from 'next/headers';
+import AppShell from '@/components/AppShell';
+import { getSessionFromCookieStore } from '@/lib/auth';
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <Header />
-      <main className="flex-1">
-        <div className="p-4 md:p-8 max-w-[1440px] mx-auto">
-          {children}
-        </div>
-      </main>
-      <Footer />
-    </div>
-  );
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const session = await getSessionFromCookieStore(cookieStore);
+
+  return <AppShell session={session}>{children}</AppShell>;
 }
