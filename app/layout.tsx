@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'CanisVET',
+  title: 'Platforma clinica',
   description: 'Platforma SaaS pentru clinici veterinare',
 };
 

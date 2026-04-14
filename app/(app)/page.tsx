@@ -37,7 +37,6 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-sm backdrop-blur">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700">CanisVET</div>
         <h1 className="mt-1 text-3xl font-bold text-slate-900">Dashboard operațional</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-600">
           Vizualizare rapidă pentru modulele principale ale clinicii. Datele sunt actualizate în contextul clinicii active.

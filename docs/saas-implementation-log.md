@@ -557,3 +557,73 @@
   - cron/reminders (`CRON_SECRET`, `SMSO_*`)
 - Removed obsolete local vars (`AUTH_USERNAME`, `AUTH_PASSWORD`, `ALLOWED_IPS`) from `.env.local`.
 - Confirmed required runtime env keys are present for local E2E registration + import path.
+
+## 2026-04-13 - Generated login design implementation
+
+- Implemented `generated_pages/login_page_generated` design into production login route.
+- Added dedicated login experience component:
+  - `components/auth/LoginExperience.tsx`
+- Updated route file to use the new component:
+  - `app/login/page.tsx`
+- Brought in required visual asset:
+  - `public/images/hero-vet.jpg`
+- Aligned route behavior with existing app flows:
+  - preserved auth API contract (`/api/auth/login`, 2FA redirect handling)
+  - corrected forgot-password link to existing route (`/reset-password/request`)
+
+## 2026-04-14 - Login hero image visibility fix
+
+- Root cause: auth proxy was intercepting static public assets (`/images/*`) and forcing auth flow, which blocked the login-side hero image.
+- Updated `proxy.ts` public bypass logic:
+  - allow `/images/` path directly
+  - allow any static file request with extension (`/path/file.ext`)
+- Kept login UI component unchanged functionally; image path remains `/images/hero-vet.jpg`.
+
+## 2026-04-14 - Unified app logo update
+
+- Renamed generated asset `public/images/image-01.svg` to canonical app logo `public/logo.svg`.
+- Updated app branding references to use the same logo asset:
+  - `components/Header.tsx`
+  - `components/Footer.tsx`
+  - `components/Sidebar.tsx`
+  - `components/auth/LoginExperience.tsx`
+
+## 2026-04-14 - Logo presentation cleanup (transparent + no name label)
+
+- Increased hero logo size on login page for better visibility.
+- Removed hero logo background so logo renders on transparent background.
+- Removed visible `CanisVET`/`CanisVet` text labels from the frontend app shell and auth pages.
+- Updated affected files:
+  - `components/auth/LoginExperience.tsx`
+  - `components/Header.tsx`
+  - `components/Footer.tsx`
+  - `components/Sidebar.tsx`
+  - `app/register/page.tsx`
+  - `components/AcceptInvitePage.tsx`
+  - `app/reset-password/[token]/page.tsx`
+  - `app/(app)/page.tsx`
+  - `app/layout.tsx`
+  - `app/login/2fa/setup/page.tsx`
+  - `app/legal/privacy/page.tsx`
+  - `app/legal/terms/page.tsx`
+  - `app/legal/dpa/page.tsx`
+
+## 2026-04-14 - Login hero/content split refinement
+
+- Removed all branding text/logo content from hero panel on login page.
+- Kept hero as image-only visual background with subtle overlay.
+- Moved a larger logo to the authentication panel, positioned above login heading/form.
+- Updated file:
+  - `components/auth/LoginExperience.tsx`
+
+## 2026-04-14 - SVG logo transparency fix
+
+- Edited `public/logo.svg` and removed the white full-canvas background path.
+- Result: logo now renders with transparent background.
+
+## 2026-04-14 - Login logo size/placement adjustment
+
+- Increased login-panel logo size to `h-48 w-48` (2x).
+- Moved logo below the registration text/link block on login page.
+- Updated file:
+  - `components/auth/LoginExperience.tsx`

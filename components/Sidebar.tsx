@@ -156,12 +156,13 @@ export default function Sidebar({ session }: SidebarProps) {
       <div className="app-surface overflow-hidden rounded-3xl">
         <div className="bg-gradient-to-r from-slate-900 via-cyan-900 to-slate-900 px-4 py-3 text-white md:px-5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/15 text-sm font-bold text-white ring-1 ring-white/20">
-              CV
+            <div className="grid h-10 w-10 place-items-center overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.svg" alt="Logo" className="h-9 w-9 object-contain" />
             </div>
             <div className="min-w-0">
               <div className="truncate text-base font-semibold text-white">
-                {session?.clinicName ?? 'CanisVET'}
+                {session?.clinicName ?? 'Clinica'}
               </div>
               <div className="truncate text-xs text-cyan-100/85">
                 {session?.fullName ?? session?.email ?? 'Platformă clinică'} · {getRoleLabel(session?.role)}
@@ -207,7 +208,7 @@ export default function Sidebar({ session }: SidebarProps) {
                   ))}
                 </select>
               )}
-              <div className="text-xs text-slate-500">CanisVET © 2026</div>
+              <div className="text-xs text-slate-500">© 2026</div>
             </div>
 
             <button

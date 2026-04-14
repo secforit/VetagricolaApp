@@ -150,7 +150,7 @@ function TotpSetupForm() {
               <div className="mt-3 flex justify-center">
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(setup.otpauth_url)}`}
-                  alt="QR MFA CanisVET"
+                  alt="QR MFA"
                   className="h-[220px] w-[220px] rounded-xl border border-slate-200 bg-white p-2"
                 />
               </div>

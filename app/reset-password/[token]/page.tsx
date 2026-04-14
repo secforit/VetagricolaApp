@@ -54,7 +54,7 @@ export default function ResetPasswordPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Resetează parola</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Introdu o parolă nouă pentru contul tău CanisVET.
+            Introdu o parolă nouă pentru contul tău.
           </p>
         </div>
 

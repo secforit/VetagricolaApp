@@ -138,7 +138,7 @@ export default function AcceptInvitePage({ token }: AcceptInvitePageProps) {
             <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-2xl font-bold">
               C
             </div>
-            <h1 className="mt-8 text-3xl font-bold leading-tight">Acceptă invitația CanisVET</h1>
+            <h1 className="mt-8 text-3xl font-bold leading-tight">Acceptă invitația</h1>
             <p className="mt-4 text-sm leading-6 text-slate-300">
               Creează contul de acces pentru clinica la care ai fost invitat(ă).
             </p>

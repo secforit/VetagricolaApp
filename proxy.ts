@@ -18,6 +18,8 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const secretValue = process.env.AUTH_SECRET;
 
+  const isPublicFile = /\.[^/]+$/.test(pathname);
+
   if (!secretValue) {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
@@ -26,6 +28,8 @@ export async function proxy(req: NextRequest) {
   if (
     PUBLIC_PREFIXES.some(p => pathname.startsWith(p)) ||
     pathname.startsWith('/_next') ||
+    pathname.startsWith('/images/') ||
+    isPublicFile ||
     pathname === '/favicon.ico'
   ) {
     return NextResponse.next();

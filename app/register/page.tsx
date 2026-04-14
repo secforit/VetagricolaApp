@@ -113,7 +113,7 @@ export default function RegisterPage() {
             <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-2xl font-bold">
               C
             </div>
-            <h1 className="mt-8 text-3xl font-bold leading-tight">Înregistrează o clinică CanisVET</h1>
+            <h1 className="mt-8 text-3xl font-bold leading-tight">Înregistrează o clinică</h1>
             <p className="mt-4 text-sm leading-6 text-slate-300">
               V1 pornește cu România, trial de 30 de zile, 2 utilizatori maximum în trial și MFA obligatoriu pentru administratorul clinicii.
             </p>
